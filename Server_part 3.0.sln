@@ -1,31 +1,321 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.7.34024.191
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Server_part 3.0", "Server_part 3.0\Server_part 3.0.vcxproj", "{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}"
-EndProject
-Global
-	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|x64 = Debug|x64
-		Debug|x86 = Debug|x86
-		Release|x64 = Release|x64
-		Release|x86 = Release|x86
-	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Debug|x64.ActiveCfg = Debug|x64
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Debug|x64.Build.0 = Debug|x64
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Debug|x86.ActiveCfg = Debug|Win32
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Debug|x86.Build.0 = Debug|Win32
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Release|x64.ActiveCfg = Release|x64
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Release|x64.Build.0 = Release|x64
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Release|x86.ActiveCfg = Release|Win32
-		{3E7F7BEE-EBC3-4AE4-A47F-5942E12A3218}.Release|x86.Build.0 = Release|Win32
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {0A0CB286-4B42-4D00-B890-58D03094B014}
-	EndGlobalSection
-EndGlobal
+//main.cpp !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#include <iostream>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <stdio.h>
+#include <vector>
+#include "filesystem.h"
+#include<cstring>
+
+
+#pragma comment(lib, "Ws2_32.lib")
+#define BUFF_SIZE 1024
+
+using namespace std;
+
+
+int main()
+{
+
+	WSADATA wsData;
+	int erState = WSAStartup(MAKEWORD(2, 2), &wsData);
+	if (erState)
+	{
+		cout << "Error WinSock version initialization # " << GetLastError() << endl;
+		return 1;
+	}
+	else
+		cout << "WinSock initialization is OK" << endl;
+
+	// Server socket initialization
+	SOCKET servSock = socket(AF_INET, SOCK_STREAM, 0);
+	if (servSock == INVALID_SOCKET)
+	{
+		cout << "Error initialization socket # " << WSAGetLastError() << endl;
+		closesocket(servSock);
+		WSACleanup();
+		return 1;
+	}
+	else
+		cout << "Serever socket initialization is OK" << endl;
+
+	// Server socket binding
+	sockaddr_in servInfo;
+	ZeroMemory(&servInfo, sizeof(servInfo));
+
+	servInfo.sin_family = AF_INET;
+	servInfo.sin_port = htons(1024);
+
+	in_addr ip_to_num;
+	erState = inet_pton(AF_INET, "127.0.0.1", &ip_to_num);
+	if (erState <= 0)
+	{
+		cout << "Error in IP translation to special numeric format" << endl;
+		return 1;
+	}
+
+	servInfo.sin_addr = ip_to_num;
+
+	erState = bind(servSock, (SOCKADDR*)&servInfo, sizeof(servInfo));
+	if (erState)
+	{
+		cout << "Error socket binding to server info. Errrr # " << WSAGetLastError() << endl;
+		closesocket(servSock);
+		WSACleanup();
+		return 1;
+	}
+	else
+		cout << "Binding socket to server info is OK" << endl;
+
+	//Starting to listen to any Clients
+	erState = listen(servSock, SOMAXCONN);
+	if (erState)
+	{
+		cout << "Can't start to listen to. Error # " << WSAGetLastError() << endl;
+		closesocket(servSock);
+		WSACleanup();
+		return 1;
+	}
+	else
+		cout << "Listening ..." << endl;
+
+	//Client socket creation and acception in case of connection
+	path p_folder = "C:\\Users\\User\\Documents\\Server";
+
+	sockaddr_in clientInfo;
+	ZeroMemory(&clientInfo, sizeof(clientInfo));
+	int clientInfo_size = sizeof(clientInfo);
+	SOCKET clientConn = accept(servSock, (SOCKADDR*)&clientInfo, &clientInfo_size);
+	if (clientConn == INVALID_SOCKET)
+	{
+		cout << "Client is detected, but can't be connected to server. Error # " << WSAGetLastError() << endl;
+		closesocket(servSock);
+		closesocket(clientConn);
+		WSACleanup();
+		return 1;
+	}
+	else
+	{
+		cout << "Connection to a client established successfully" << endl;
+		char clientIP[22];
+		inet_ntop(AF_INET, &clientInfo.sin_addr, clientIP, INET_ADDRSTRLEN);
+		cout << "Client connected with IP address " << clientIP << endl;
+
+		char name[80] = "User ";
+		strcat_s(name, clientIP);
+
+		p_folder /= name;
+		cout << "Folder of a client is: " << p_folder << endl;
+
+		cout<<createDirectory(p_folder)<<endl;
+		current_path(p_folder);
+	}
+
+	//Exchange text data between Server and Client. Disconnection if a client send "xxx"
+
+	const int packageMessageSize = 1024;
+	vector <char> servBuff(packageMessageSize), clientBuff(packageMessageSize);							// Creation of buffers for sending and receiving data
+
+	short packet_size = 0;	
+	
+	int i_dir = 1;
+
+	while (true)
+	{
+		packet_size = recv(clientConn, servBuff.data(), servBuff.size(), 0);
+		servBuff.resize(packet_size);
+		string clear_message(servBuff.data(), servBuff.size());
+		/*for (auto i : servBuff)
+		{
+			if ((i >= 'a' && i <= 'z')|| (i >= 'A' && i <= 'Z'))
+			{
+				clear_message.push_back(i);
+			}
+			
+		}*/
+		
+		if (packet_size == SOCKET_ERROR) {
+			cout << "Can't receive message from Client. Error # " << WSAGetLastError() << endl;
+			closesocket(servSock);
+			closesocket(clientConn);
+			WSACleanup();
+			return 1;
+		}
+		cout << "Client's message: " << servBuff.data() << endl;
+		/*cout << "Your (host) message: ";
+		fgets(clientBuff.data(), clientBuff.size(), stdin);  */
+
+		// Check whether server would like to stop chatting 
+		string otv;
+		if (clientBuff[0] == 'x' && clientBuff[1] == 'x' && clientBuff[2] == 'x') {
+			shutdown(clientConn, SD_BOTH);
+			closesocket(servSock);
+			closesocket(clientConn);
+			WSACleanup();
+			return 0;
+		}
+		else
+		{
+			if (clear_message == "createDirectory")
+			{
+				cout << "accept message: createDirectory" << endl;
+				string cur_p = "Directory " + to_string(i_dir);
+				path p = current_path() /= cur_p;
+				otv = createDirectory(p);
+			}
+			else if (strcmp(clear_message.data(), "deleteDirectory") == 0)
+			{
+				i_dir--;
+				string cur_p = "Directory " + to_string(i_dir);
+				path p = current_path() /= cur_p;
+				otv = deleteDirectory(p);
+			}
+		}
+
+		vector<char>res(otv.size());
+		copy(otv.begin(), otv.end(), res.begin());
+		
+		packet_size = send(clientConn, res.data(), res.size(), 0);
+
+		if (packet_size == SOCKET_ERROR) {
+			cout << "Can't send message to Client. Error # " << WSAGetLastError() << endl;
+			closesocket(servSock);
+			closesocket(clientConn);
+			WSACleanup();
+			return 1;
+		}
+		i_dir++;
+	}
+
+	closesocket(servSock);
+	closesocket(clientConn);
+	WSACleanup();
+
+	return 0;
+
+}
+
+//filesystem.h !!!!!!!!!!!!!!!!!!!!!!!!!!!
+#pragma once
+#include <iostream>
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+using namespace std;
+using namespace filesystem;
+
+string createDirectory(const path& pdir);
+string deleteDirectory(const path& pdir);
+void createFile(const string& pf);
+void deleteFile(const path& pf);
+void infToFile(const string& pf);
+void add_infToFile(const string& pf);
+void cd(const path& p);
+void printTree(const string& path, const int& level);
+
+
+
+//filesystem.cpp !!!!!!!!!!!!!!!!!!!!!!!!!!!
+#include "filesystem.h"
+
+
+string createDirectory(const path& pdir)
+{
+	if (create_directory(pdir))
+		return "Directory is created";
+	else
+		return "Directory isn't created";
+}
+
+string deleteDirectory(const path& pdir)
+{
+	if (remove_all(pdir))
+		return "Directory is removed";
+	else
+		return "Ditectory isn't removed";
+}
+
+void createFile(const string& pf)
+{
+	ofstream fout(pf);
+	if (fout.is_open())
+	{
+		cout << "File is created" << endl;
+		fout.close();
+	}
+	else
+		cout << "File isn't created" << endl;
+}
+
+void deleteFile(const path& pf)
+{
+	if (remove(pf))
+		cout << "File is removed" << endl;
+	else
+		cout << "File isn't removed" << endl;
+}
+
+void infToFile(const string& pf)
+{
+	ofstream fout(pf);
+	if (!fout.is_open())
+	{
+		cout << "File can't be opened" << endl;
+	}
+	else
+	{
+		cout << "Write information to file. If you want to stop input, enter - \"exit\"" << endl;
+		string str;
+		while (getline(cin, str) && str != "exit")
+		{
+			fout << str << endl;
+		}
+		fout.close();
+	}
+}
+
+void add_infToFile(const string& pf)
+{
+	ofstream fout("myfile.txt", ios::app);
+	if (!fout.is_open())
+	{
+		cout << "File can't be opened" << endl;
+	}
+	else
+	{
+		cout << "Add information to file. If you want to stop input, enter - \"exit\"" << endl;
+		string str;
+		while (getline(cin, str) && str != "exit")
+		{
+			fout << str << endl;
+		}
+		fout.close();
+	}
+}
+
+void cd(const path& p)
+{
+	if (exists(p) && is_directory(p))
+	{
+		current_path(p);
+		cout << "Current directory is " << p << endl;
+	}
+	else
+	{
+		cout << "Directory " << p << " does't exist" << endl;
+	}
+}
+
+void printTree(const string& path, const int& level)
+{
+	for (const auto& entry : directory_iterator(path))
+	{
+		cout << string(level + 1, ' ') << "|-- " << entry.path().filename() << endl;
+
+		if (is_directory(entry))
+		{
+			printTree(entry.path().string(), level + 1);
+		}
+	}
+}
