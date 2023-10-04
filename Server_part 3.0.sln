@@ -13,6 +13,10 @@
 
 using namespace std;
 
+void check_sending(short& packet_size, SOCKET clientConn, SOCKET servSock);
+void check_receiving(short& packet_size, SOCKET clientConn, SOCKET servSock);
+
+
 
 int main()
 {
@@ -118,36 +122,24 @@ int main()
 
 	short packet_size = 0;	
 	
-	int i_dir = 1;
+	
 
 	while (true)
 	{
+		servBuff.resize(packageMessageSize);
 		packet_size = recv(clientConn, servBuff.data(), servBuff.size(), 0);
+		check_receiving(packet_size, clientConn, servSock);
+
 		servBuff.resize(packet_size);
 		string clear_message(servBuff.data(), servBuff.size());
-		/*for (auto i : servBuff)
-		{
-			if ((i >= 'a' && i <= 'z')|| (i >= 'A' && i <= 'Z'))
-			{
-				clear_message.push_back(i);
-			}
-			
-		}*/
 		
-		if (packet_size == SOCKET_ERROR) {
-			cout << "Can't receive message from Client. Error # " << WSAGetLastError() << endl;
-			closesocket(servSock);
-			closesocket(clientConn);
-			WSACleanup();
-			return 1;
-		}
+		
+		
 		cout << "Client's message: " << servBuff.data() << endl;
-		/*cout << "Your (host) message: ";
-		fgets(clientBuff.data(), clientBuff.size(), stdin);  */
-
-		// Check whether server would like to stop chatting 
-		string otv;
-		if (clientBuff[0] == 'x' && clientBuff[1] == 'x' && clientBuff[2] == 'x') {
+		servBuff.clear();
+		
+		string res;
+		if (clear_message == "exit") {
 			shutdown(clientConn, SD_BOTH);
 			closesocket(servSock);
 			closesocket(clientConn);
@@ -158,33 +150,77 @@ int main()
 		{
 			if (clear_message == "createDirectory")
 			{
-				cout << "accept message: createDirectory" << endl;
-				string cur_p = "Directory " + to_string(i_dir);
-				path p = current_path() /= cur_p;
-				otv = createDirectory(p);
+				
+				servBuff.resize(packageMessageSize);
+				string otv1("Input the directory's name to create: ");
+				clientBuff.assign(otv1.begin(), otv1.end());
+
+				packet_size = send(clientConn, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientConn, servSock);
+				clientBuff.clear();
+
+				packet_size = recv(clientConn, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientConn, servSock);
+
+				path p = current_path() /= servBuff.data();
+
+				res = createDirectory(p);
 			}
-			else if (strcmp(clear_message.data(), "deleteDirectory") == 0)
+			else if (clear_message == "deleteDirectory")
 			{
-				i_dir--;
-				string cur_p = "Directory " + to_string(i_dir);
-				path p = current_path() /= cur_p;
-				otv = deleteDirectory(p);
+				servBuff.resize(packageMessageSize);
+				string otv1("Input the directory's name to delete: ");
+				clientBuff.assign(otv1.begin(), otv1.end());
+				packet_size = send(clientConn, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientConn, servSock);
+				clientBuff.clear();
+
+				packet_size = recv(clientConn, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientConn, servSock);
+
+				path p = current_path() /= servBuff.data();
+
+				res = deleteDirectory(p);
+			}
+			else if (clear_message == "createFile")
+			{
+				servBuff.resize(packageMessageSize);
+				string otv1("Input the file's name to create: ");
+				clientBuff.assign(otv1.begin(), otv1.end());
+				packet_size = send(clientConn, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientConn, servSock);
+				clientBuff.clear();
+
+				packet_size = recv(clientConn, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientConn, servSock);
+
+				path p = current_path() /= servBuff.data();
+
+				res = createFile(p);
+			}
+			else if (clear_message == "deleteFile")
+			{
+				servBuff.resize(packageMessageSize);
+				string otv1("Input the file's name to delete: ");
+				clientBuff.assign(otv1.begin(), otv1.end());
+				packet_size = send(clientConn, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientConn, servSock);
+				clientBuff.clear();
+
+				packet_size = recv(clientConn, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientConn, servSock);
+
+				path p = current_path() /= servBuff.data();
+
+				res = deleteFile(p);
 			}
 		}
 
-		vector<char>res(otv.size());
-		copy(otv.begin(), otv.end(), res.begin());
-		
-		packet_size = send(clientConn, res.data(), res.size(), 0);
-
-		if (packet_size == SOCKET_ERROR) {
-			cout << "Can't send message to Client. Error # " << WSAGetLastError() << endl;
-			closesocket(servSock);
-			closesocket(clientConn);
-			WSACleanup();
-			return 1;
-		}
-		i_dir++;
+		servBuff.clear();
+		clientBuff.assign(res.begin(), res.end());
+		packet_size = send(clientConn, clientBuff.data(), clientBuff.size(), 0);
+		check_sending(packet_size, clientConn, servSock);
+		clientBuff.clear();
 	}
 
 	closesocket(servSock);
@@ -195,9 +231,30 @@ int main()
 
 }
 
+void check_sending(short& packet_size, SOCKET clientConn, SOCKET servSock)
+{
+	if (packet_size == SOCKET_ERROR) {
+		cout << "Can't send message to Client. Error # " << WSAGetLastError() << endl;
+		closesocket(servSock);
+		closesocket(clientConn);
+		WSACleanup();
+		exit(1);
+	}
+}
 
+void check_receiving(short& packet_size, SOCKET clientConn, SOCKET servSock)
+{
+	if (packet_size == SOCKET_ERROR) {
+		cout << "Can't receive message from Client. Error # " << WSAGetLastError() << endl;
+		closesocket(servSock);
+		closesocket(clientConn);
+		WSACleanup();
+		exit(1);
+	}
+}
 
 //filesystem.h !!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 #pragma once
 #include <iostream>
 #include <filesystem>
@@ -209,13 +266,12 @@ using namespace filesystem;
 
 string createDirectory(const path& pdir);
 string deleteDirectory(const path& pdir);
-void createFile(const string& pf);
-void deleteFile(const path& pf);
+string createFile(const path& pf);
+string deleteFile(const path& pf);
 void infToFile(const string& pf);
 void add_infToFile(const string& pf);
 void cd(const path& p);
 void printTree(const string& path, const int& level);
-
 
 
 
@@ -240,24 +296,24 @@ string deleteDirectory(const path& pdir)
 		return "Ditectory isn't removed";
 }
 
-void createFile(const string& pf)
+string createFile(const path& pf)
 {
 	ofstream fout(pf);
 	if (fout.is_open())
 	{
-		cout << "File is created" << endl;
 		fout.close();
+		return "File is created";
 	}
 	else
-		cout << "File isn't created" << endl;
+		return "File isn't created";
 }
 
-void deleteFile(const path& pf)
+string deleteFile(const path& pf)
 {
 	if (remove(pf))
-		cout << "File is removed" << endl;
+		return "File is removed";
 	else
-		cout << "File isn't removed" << endl;
+		return "File isn't removed";
 }
 
 void infToFile(const string& pf)
