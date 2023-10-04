@@ -10,6 +10,8 @@
 #define BUFF_SIZE 1024
 using namespace std;
 
+void check_sending(short& packet_size, SOCKET clientSock);
+void check_receiving(short& packet_size, SOCKET clientSock);
 
 int main()
 {
@@ -69,43 +71,99 @@ int main()
 
 	//Exchange text data between Server and Client. Disconnection if a Client send "xxx"
 
-	vector <char> servBuff(30), clientBuff(30);							// Creation of buffers for sending and receiving data
+	const int packageMessageSize = 1024;
+	vector <char>  servBuff(packageMessageSize);								// Creation of buffers for sending and receiving data
 	short packet_size = 0;													// The size of sending / receiving packet in bytes
 
 	while (true) {
 
 		cout << "Your (Client) message to Server: ";
-		fgets(clientBuff.data(), clientBuff.size(), stdin);
+		char message[1024];
+		gets_s(message);
+		
+		vector <char> clientBuff(message, message+strlen(message));
+		string str_message(message);
+
+		packet_size = send(clientSock, clientBuff.data(), clientBuff.size(), 0);
+		check_sending(packet_size, clientSock);
+		clientBuff.clear();
 
 		// Check whether client like to stop chatting 
-		if (clientBuff[0] == 'x' && clientBuff[1] == 'x' && clientBuff[2] == 'x') {
+		if (str_message == "exit") {
 			shutdown(clientSock, SD_BOTH);
 			closesocket(clientSock);
 			WSACleanup();
 			return 0;
 		}
-
-
-		packet_size = send(clientSock, clientBuff.data(), clientBuff.size(), 0);
-
-		if (packet_size == SOCKET_ERROR) {
-			cout << "Can't send message to Server. Error # " << WSAGetLastError() << endl;
-			closesocket(clientSock);
-			WSACleanup();
-			return 1;
-		}
-
-		packet_size = recv(clientSock, servBuff.data(), servBuff.size(), 0);
-
-		if (packet_size == SOCKET_ERROR) 
-		{
-			cout << "Can't receive message from Server. Error # " << WSAGetLastError() << endl;
-			closesocket(clientSock);
-			WSACleanup();
-			return 1;
-		}
 		else
-			cout << "Server message: " << servBuff.data() << endl;
+		{
+			if (str_message == "createDirectory")
+			{
+				servBuff.resize(packageMessageSize);
+				packet_size = recv(clientSock, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientSock);
+				cout << "Server message: " << servBuff.data() << endl;
+				servBuff.clear();
+
+				gets_s(message);
+				vector <char> clientBuff(message, message + strlen(message));
+
+				packet_size = send(clientSock, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientSock);
+				clientBuff.clear();				
+			}
+			else if (str_message == "deleteDirectory")
+			{
+				servBuff.resize(packageMessageSize);
+				packet_size = recv(clientSock, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientSock);
+				cout << "Server message: " << servBuff.data() << endl;
+				servBuff.clear();
+
+				gets_s(message);
+				vector <char> clientBuff(message, message + strlen(message));
+
+				packet_size = send(clientSock, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientSock);
+				clientBuff.clear();
+			}
+			else if (str_message == "createFile")
+			{
+				servBuff.resize(packageMessageSize);
+				packet_size = recv(clientSock, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientSock);;
+				cout << "Server message: " << servBuff.data() << endl;
+				servBuff.clear();
+
+				gets_s(message);
+				vector <char> clientBuff(message, message + strlen(message));
+
+				packet_size = send(clientSock, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientSock);
+				clientBuff.clear();
+			}
+			else if (str_message == "deleteFile")
+			{
+				servBuff.resize(packageMessageSize);
+				packet_size = recv(clientSock, servBuff.data(), servBuff.size(), 0);
+				check_receiving(packet_size, clientSock);;
+				cout << "Server message: " << servBuff.data() << endl;
+				servBuff.clear();
+
+				gets_s(message);
+				vector <char> clientBuff(message, message + strlen(message));
+
+				packet_size = send(clientSock, clientBuff.data(), clientBuff.size(), 0);
+				check_sending(packet_size, clientSock);
+				clientBuff.clear();
+			}
+		}
+
+		servBuff.resize(packageMessageSize);
+		packet_size = recv(clientSock, servBuff.data(), servBuff.size(), 0);
+		check_receiving(packet_size, clientSock);
+		cout << "Server message: " << servBuff.data() << endl;		
+		servBuff.clear();
 
 	}
 
@@ -113,4 +171,25 @@ int main()
 	WSACleanup();
 
 	return 0;
+}
+
+void check_sending(short& packet_size, SOCKET clientSock)
+{
+	if (packet_size == SOCKET_ERROR) {
+		cout << "Can't send message to Server. Error # " << WSAGetLastError() << endl;
+		closesocket(clientSock);
+		WSACleanup();
+		exit(1);
+	}
+}
+
+void check_receiving(short& packet_size, SOCKET clientSock)
+{
+	if (packet_size == SOCKET_ERROR)
+	{
+		cout << "Can't receive message from Server. Error # " << WSAGetLastError() << endl;
+		closesocket(clientSock);
+		WSACleanup();
+		exit(1);
+	}
 }
